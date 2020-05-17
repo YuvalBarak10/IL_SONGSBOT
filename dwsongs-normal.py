@@ -16,6 +16,7 @@ from mutagen.easyid3 import EasyID3
 from configparser import ConfigParser
 from deezloader import Login, exceptions
 from mutagen.id3._util import ID3NoHeaderError
+from telegram import ParseMode
 
 from deezloader.deezer_settings import (
 	api_track, api_album,
@@ -85,27 +86,27 @@ def reque(url, chat_id = None, control = False):
 	if control:
 		try:
 			if thing.json()['error']['message'] == "Quota limit exceeded":
-				sendMessage(chat_id, "Please send the link again :(")
+				sendMessage(chat_id, "שלח את הקישור שוב :(")
 				return
 		except KeyError:
 			pass
 
 		try:
 			if thing.json()['error']:
-				sendMessage(chat_id, "No result has been found :(")
+				sendMessage(chat_id, "לא נמצאו תוצאות :(")
 				return
 		except KeyError:
 			pass
 
 	return thing
 
-def init_user(chat_id, tongue):
+def init_user(chat_id, Language):
 	try:
 		users[chat_id]
 	except KeyError:
 		users[chat_id] = {
 			"quality": "MP3_320",
-			"tongue": tongue,
+			"Language": Language,
 			"c_downloads": 0
 		}
 
@@ -196,9 +197,9 @@ def sendMessage(chat_id, text, reply_markup = None, reply_to_message_id = None):
 	sleep(default_time)
 
 	try:
-		users[chat_id]['tongue']
+		users[chat_id]['Language']
 	except KeyError:
-		users[chat_id]['tongue'] = "en"
+		users[chat_id]['Language'] = "English"
 
 	try:
 		bot.sendChatAction(chat_id, "typing")
@@ -206,7 +207,7 @@ def sendMessage(chat_id, text, reply_markup = None, reply_to_message_id = None):
 		return bot.sendMessage(
 			chat_id,
 			translate(
-				users[chat_id]['tongue'], text
+				users[chat_id]['Language'], text
 			),
 			reply_markup = reply_markup,
 			reply_to_message_id = reply_to_message_id
@@ -214,7 +215,7 @@ def sendMessage(chat_id, text, reply_markup = None, reply_to_message_id = None):
 	except (error.Unauthorized, error.TimedOut, error.BadRequest):
 		pass
 
-def sendPhoto(chat_id, photo, caption = None, reply_markup = None):
+def sendPhoto(chat_id, photo, caption = None, reply_markup = None,parse_mode = ParseMode.MARKDOWN):
 	sleep(default_time)
 
 	try:
@@ -223,7 +224,8 @@ def sendPhoto(chat_id, photo, caption = None, reply_markup = None):
 		return bot.sendPhoto(
 			chat_id, photo,
 			caption = caption,
-			reply_markup = reply_markup
+			reply_markup = reply_markup,
+			parse_mode = parse_mode
 		)
 	except (error.Unauthorized, error.TimedOut):
 		pass
@@ -246,10 +248,12 @@ def sendAudio(
 			except ID3NoHeaderError:
 				tag = FLAC(audio)
 				duration = int(tag.info.length)
+				
 
 			if os.path.getsize(audio) < telegram_audio_api_limit:
 				file_id = bot.sendAudio(
 					chat_id, open(audio, "rb"),
+					caption= '🎵 @IL_Songs',
 					thumb = open(image.url, "rb"),
 					duration = duration,
 					performer = tag['artist'][0],
@@ -269,11 +273,11 @@ def sendAudio(
 						)
 					)
 			else:
-				sendMessage(chat_id, "Song too big :(")
+				sendMessage(chat_id, "השיר גדול מדי :(")
 		else:
 			bot.sendAudio(chat_id, audio)
 	except error.BadRequest:
-		sendMessage(chat_id, "Sorry the track %s doesn't seem readable on Deezer :(" % link)
+		sendMessage(chat_id, "השיר:  %s לא נמצא בדיזר :(" % link)
 
 def track(link, chat_id, quality):
 	global spo
@@ -347,7 +351,7 @@ def track(link, chat_id, quality):
 
 				youtube = True
 			except:
-				sendMessage(chat_id, "Sorry I cannot download this song %s :(" % link)
+				sendMessage(chat_id, "סליחה אני לא מצליח להוריד את השיר הזה %s :(" % link)
 				return
 
 		image = get_image(image)
@@ -371,7 +375,7 @@ def Link(link, chat_id, quality, message_id):
 				except Exception as a:
 					if not "The access token expired" in str(a):
 						sendMessage(
-							chat_id, "Invalid link %s ;)" % link,
+							chat_id, "קישור לא תקין. %s ;)" % link,
 							reply_to_message_id = message_id
 						)
 
@@ -393,6 +397,7 @@ def Link(link, chat_id, quality, message_id):
 				artist = url['album']['artists'][0]['name']
 				album = url['album']['name']
 				date = url['album']['release_date']
+				durations = url['duration']
 
 			elif "deezer" in link:
 				kind = "track"
@@ -412,6 +417,7 @@ def Link(link, chat_id, quality, message_id):
 				artist = url['artist']['name']
 				album = url['album']['title']
 				date = url['album']['release_date']
+				durations = url['duration']
 
 			if any(
 				a in link
@@ -422,12 +428,12 @@ def Link(link, chat_id, quality, message_id):
 					caption = (
 						send_image_track_query
 						% (
-							name,
 							artist,
-							album,
+							name,
 							date
 						)
 					)
+					,parse_mode = ParseMode.HTML
 				)
 
 				track(link, chat_id, quality)
@@ -444,7 +450,7 @@ def Link(link, chat_id, quality, message_id):
 				except Exception as a:
 					if not "The access token expired" in str(a):
 						sendMessage(
-							chat_id, "Invalid link %s ;)" % link,
+							chat_id, "קישור לא תקין. %s ;)" % link,
 							reply_to_message_id = message_id
 						)
 
@@ -471,7 +477,6 @@ def Link(link, chat_id, quality, message_id):
 
 				def lazy(a):
 					count[0] += a['duration_ms']
-
 					links.append(
 						a['external_urls']['spotify']
 					)
@@ -755,19 +760,19 @@ def Link(link, chat_id, quality, message_id):
 
 	except FileNotFoundError:
 		sendMessage(
-			chat_id, "Resend link please...",
+			chat_id, "שלח את הקישור שוב בבקשה...",
 			reply_to_message_id = message_id
 		)
 
 	except error.TimedOut:
-		sendMessage(chat_id, "Retry after a few minutes")
+		sendMessage(chat_id, "נסה עוד כמה דקות")
 
 	except exceptions.QuotaExceeded:
-		sendMessage(chat_id, "Please send the link %s again :(" % link)
+		sendMessage(chat_id, "שלח %s שוב :(" % link)
 
 	except exceptions.AlbumNotFound:
-		sendMessage(chat_id, "Album %s didn't find on Deezer :(" % link)
-		sendMessage(chat_id, "Try to search it throught inline mode or search the link on Deezer")
+		sendMessage(chat_id, "האלבום %s לא נמצא בדיזר :(" % link)
+		sendMessage(chat_id, "חפש שוב")
 
 	except Exception as a:
 		logging.error(a)
@@ -775,7 +780,7 @@ def Link(link, chat_id, quality, message_id):
 		logging.error(link)
 
 		sendMessage(
-			chat_id, "OPS :( Something went wrong please send to @An0nimia this link: {} {}, if this happens again".format(link, quality)
+			chat_id, "מצטערים :( משהו השתבש): \n{} \n{}".format(link, quality)
 		)
 
 	if done == 1:
@@ -901,17 +906,17 @@ def Audio(audio, chat_id):
 		reply_markup = InlineKeyboardMarkup(keyboard)
 	)
 
-def inline(message_id, chat_id, query_data, query_id, tongue):
+def inline(message_id, chat_id, query_data, query_id, Language):
 	try:
 		if query_data in settingss or query_data in qualities:
 			if query_data == "quality":
 				keyboard = qualities_keyboard
 
-			elif query_data == "tongue":
-				if users[chat_id]['tongue'] != "en":
-					users[chat_id]['tongue'] = "en"
+			elif query_data == "Language":
+				if users[chat_id]['Language'] != "English":
+					users[chat_id]['Language'] = "English"
 				else:
-					users[chat_id]['tongue'] = tongue
+					users[chat_id]['Language'] = Language
 
 				keyboard = create_keyboard(settingss, chat_id)
 
@@ -930,7 +935,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 			bot.answerCallbackQuery(
 				query_id,
 				translate(
-					users[chat_id]['tongue'], "DONE ✅"
+					users[chat_id]['Language'], "DONE ✅"
 				)
 			)
 
@@ -971,7 +976,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 						bot.answerCallbackQuery(
 							query_id,
 							translate(
-								users[chat_id]['tongue'],
+								users[chat_id]['Language'],
 								"Wait the end and repeat the step, did you think you could download how much songs you wanted? ;)"
 							),
 							show_alert = True
@@ -984,7 +989,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 				bot.answerCallbackQuery(
 					query_id,
 					translate(
-						users[chat_id]['tongue'], "Songs are downloading ⬇️"
+						users[chat_id]['Language'], "Songs are downloading ⬇️"
 					)
 				)
 
@@ -1020,7 +1025,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 				keyboard.append(
 					[
 						InlineKeyboardButton(
-							"GET ALL ⬇️",
+							"הורד הכל ⬇️",
 							callback_data = "{}/{}/down".format(link, method)
 						)
 					]
@@ -1108,7 +1113,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 				bot.answerCallbackQuery(
 					query_id,
 					translate(
-						users[chat_id]['tongue'], query_data
+						users[chat_id]['Language'], query_data
 					)
 				)
 
@@ -1133,7 +1138,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 						bot.answerCallbackQuery(
 							query_id,
 							translate(
-								users[chat_id]['tongue'], "Wait the end and repeat the step, did you think you could download how much songs you wanted? ;)"
+								users[chat_id]['Language'], "Wait the end and repeat the step, did you think you could download how much songs you wanted? ;)"
 							),
 							show_alert = True
 						)
@@ -1145,7 +1150,7 @@ def inline(message_id, chat_id, query_data, query_id, tongue):
 				bot.answerCallbackQuery(
 					query_id,
 					translate(
-						users[chat_id]['tongue'], "Song is downloading"
+						users[chat_id]['Language'], "Song is downloading"
 					)
 				)
 
@@ -1168,17 +1173,17 @@ def download(update, context):
 		return
 
 	try:
-		tongue = infos_user.language_code
+		Language = infos_user.language_code
 	except AttributeError:
-		tongue = "en"
+		Language = "English"
 
-	init_user(chat_id, tongue)
+	init_user(chat_id, Language)
 
 	Thread(
 		target = inline,
 		args = (
 			message_id, chat_id,
-			query_data, query_id, tongue
+			query_data, query_id, Language
 		)
 	).start()
 
@@ -1193,11 +1198,11 @@ def search(update, context):
 		return
 
 	try:
-		tongue = infos_user.language_code
+		Language = infos_user.language_code
 	except AttributeError:
-		tongue = "en"
+		Language = "English"
 
-	init_user(chat_id, tongue)
+	init_user(chat_id, Language)
 
 	if ".chart." == query_string:
 		search1 = request(api_chart).json()
@@ -1422,17 +1427,18 @@ def menu(update, context):
 		return
 
 	try:
-		tongue = infos_user.language_code
+		Language = infos_user.language_code
 	except AttributeError:
-		tongue = "en"
+		Language = "English"
 
-	init_user(chat_id, tongue)
+	init_user(chat_id, Language)
 
 	if text == "/start":
-		sendPhoto(
-			chat_id, open(photo, "rb"),
-			start_message
-		)
+		bot.sendMessage(chat_id, start_message)
+		#bot.sendPhoto(
+		#	chat_id, open(photo, "rb"),
+		#	start_message
+		#)
 
 		keyboard = [
 			[
@@ -1468,7 +1474,7 @@ def menu(update, context):
 		]
 
 		sendMessage(
-			chat_id, "Choose what you prefer",
+			chat_id, "בחר",
 			reply_markup = InlineKeyboardMarkup(keyboard)
 		)
 
@@ -1480,7 +1486,6 @@ def menu(update, context):
 				version,
 				bot_name,
 				creator,
-				donation_link,
 				group_link,
 				statisc(chat_id, "USERS"),
 				statisc(chat_id, "TRACKS")
@@ -1496,7 +1501,7 @@ def menu(update, context):
 		)
 
 	elif text == "/shazam":
-		sendMessage(chat_id, "Send the audio or voice message to identify the song")
+		sendMessage(chat_id, "תשלחו קטע קול והרובוט יזהה את שם השיר")
 
 	elif text == "/help":
 		bot.sendMessage(chat_id, help_message)
@@ -1556,13 +1561,13 @@ def menu(update, context):
 				],
 			]
 
-			sendMessage(chat_id, "Press",
+			sendMessage(chat_id, "בחר",
 				reply_markup = InlineKeyboardMarkup(keyboard)
 			)
 
 		else:
 			if ans == "2" and users[chat_id]['c_downloads'] == 3:
-				sendMessage(chat_id, "Wait the end and repeat the step, did you think you could download how much songs you wanted? ;)")
+				sendMessage(chat_id, "חכה עד סוף ההורדה האחרונה ;)")
 			else:
 				if ans == "2":
 					users[chat_id]['c_downloads'] += 1

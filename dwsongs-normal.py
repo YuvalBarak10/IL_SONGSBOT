@@ -252,8 +252,8 @@ def sendAudio(
 					chat_id, open(audio, "rb"),
 					thumb = open(image.url, "rb"),
 					duration = duration,
-					performer = tag['artist'][0],
-					title = tag['title'][0]
+					performer = "ראשונים במוזיקה",
+					title = tag['artist'][0]+" - "+tag['title'][0]
 				)['audio']['file_id']
 
 				if not youtube:
